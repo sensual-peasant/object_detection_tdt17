@@ -276,7 +276,7 @@ def train(train_dataloader):
 
 print('starting training!')
 for epoch in range(30):
-    break
+    break # # runnn train
     start = time.time()
     train_loss = train(train_data_loader)
     print(f"Epoch #{epoch} loss: {train_loss}")
@@ -292,7 +292,7 @@ device = 'cuda'
 torch.cuda.empty_cache()
 model = get_model().to(device)
 
-PATH = 'saved_models/test_e19_batch_3000.pt' # 'saved_models/test.pt'
+PATH = 'saved_models/test_e9_batch_1800.pt' # 'saved_models/test.pt'
 model.load_state_dict(torch.load(PATH))
 
 
@@ -309,7 +309,59 @@ print(out[0]['boxes'].shape)
 
 
 ### eval attempt
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
+iou_tresholds = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
+metric = MeanAveragePrecision(iou_thresholds=iou_tresholds)
 
+
+def evaluate():
+    device = 'cuda'
+    model.to(device)
+    model.eval()
+    evals = []
+
+
+    for images, targets in val_data_loader: # val_data_loader
+        x, y = ([], [])
+        for image, target in zip(images, targets):
+            if len(target['labels']) > 0:
+                x.append(image.to(device))
+                y.append({k: v.to(device) for k, v in target.items()}) # [{k: v.to(device) for k, v in t.items()} for t in targets]
+        if len(x) <= 0:
+            continue
+        
+        with torch.no_grad():
+            model_time = time.time()
+            preds = model(x)
+            
+            #print(preds)
+            model_time = time.time() - model_time
+            evals.append(model_time)
+                
+            metric.update(preds, y)
+            
+            #
+            evals.append(model_time)
+            if len(evals) % 100 ==0: # todo remove to run whole thing
+                print(f'progress: {round(100*len(evals)/ len(train_data_loader), 2)}% values out of {len(evals), len(train_data_loader)}')
+                #print(' Following map: ', metric.compute())
+            
+
+    print(f'Average running time: {sum(evals)/len(evals)}')    
+    #map_dict = metric.compute()
+    return metric
+evaluate() # runnn eval
+with torch.no_grad():
+    map = metric.compute()
+
+
+print(f'Most important: metric: {PATH, map}')
+with open('/cluster/home/henrikya/object_detection/knegg.pdf','a') as fd:
+
+    # a_str = 'map: ' + str(map['map']) + 'map_50: ' + str(map['map_50']) + ',   map_75: ' + str(map['map_75']) + str(map['map_medium']) + str(map['map_large']) # map_medium, map_large
+    fd.write(PATH+str(map))
+
+# try saving map to file:
 
 ### submission attempt
 class Submission:
@@ -362,7 +414,7 @@ class Submission:
 
 def fill_submission():
     device = 'cpu'
-    model.to(device) # TODO Change to device when running!!
+    model.to(device)
     model.eval()
     evals = []
 
@@ -386,5 +438,5 @@ def fill_submission():
     print('average model time:', sum(evals)/len(evals))
     submission.save_preds()
     return submission 
-submission = fill_submission()
+#submission = fill_submission() # runnn test
 
